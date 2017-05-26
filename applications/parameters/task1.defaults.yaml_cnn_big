@@ -57,36 +57,124 @@ sets:
               config:
                 filters: 32
                 kernel_size: [5,5]
-                strides: [3,3]
+                strides: [2,2]
                 padding: same
                 activation: relu
                 input_shape: [200,200,1]
 
-            - class_name: BatchNormalization
+            - class_name: Conv2D
+              config:
+                filters: 32
+                kernel_size: [3,3]
+                strides: [1,1]
+                padding: same
+                activation: relu
 
             - class_name: MaxPooling2D
               config:
-                pool_size: [5,5]
+                pool_size: [2,2]
+
+            - class_name: Dropout
+              config:
+                rate: 0.3
 
             - class_name: Conv2D
               config:
                 filters: 64
-                kernel_size: [5,5]
-                strides: [3,3]
+                kernel_size: [3,3]
+                strides: [1,1]
                 padding: same
                 activation: relu
 
-            - class_name: BatchNormalization
+            - class_name: Conv2D
+              config:
+                filters: 64
+                kernel_size: [3, 3]
+                strides: [1,1]
+                padding: same
+                activation: relu
 
             - class_name: MaxPooling2D
               config:
-                pool_size: [5,5]
+                pool_size: [2,2]
 
-            - class_name: Flatten
+            - class_name: Dropout
+              config:
+                rate: 0.3
+
+            - class_name: Conv2D
+              config:
+                filters: 128
+                kernel_size: [3, 3]
+                strides: [1,1]
+                padding: same
+                activation: relu
+            - class_name: Conv2D
+              config:
+                filters: 128
+                kernel_size: [3, 3]
+                strides: [1,1]
+                padding: same
+                activation: relu
+            - class_name: Conv2D
+              config:
+                filters: 128
+                kernel_size: [3, 3]
+                strides: [1,1]
+                padding: same
+                activation: relu
+            - class_name: Conv2D
+              config:
+                filters: 128
+                kernel_size: [3, 3]
+                strides: [1,1]
+                padding: same
+                activation: relu
+
+            - class_name: MaxPooling2D
+              config:
+                pool_size: [2,2]
+
+            - class_name: Dropout
+              config:
+                rate: 0.3
+
+            - class_name: Conv2D
+              config:
+                filters: 512
+                kernel_size: [3, 3]
+                strides: [1,1]
+                padding: valid
+                activation: relu
+            - class_name: Dropout
+              config:
+                rate: 0.5
+
+            - class_name: Conv2D
+              config:
+                filters: 512
+                kernel_size: [1,1]
+                strides: [1,1]
+                padding: valid
+                activation: relu
+            - class_name: Dropout
+              config:
+                rate: 0.5
+
+            - class_name: Conv2D
+              config:
+                filters: 15
+                kernel_size: [1,1]
+                strides: [1,1]
+                padding: valid
+                activation: relu
+
+            - class_name: GlobalAveragePooling2D
 
             - class_name: Dense
               config:
                 units: CLASS_COUNT
+                kernel_initializer: uniform
                 activation: softmax
 
           loss: categorical_crossentropy
@@ -104,13 +192,13 @@ sets:
 
     recognizer:
       frame_accumulation:
-        enable: true
-      frame_binarization:
         enable: false
+      frame_binarization:
+        enable: true
         type: frame_max             # [frame_max, global_threshold]
       decision_making:
         enable: true
-        type: maximum         # [maximum, majority_vote]
+        type: majority_vote         # [maximum, majority_vote]
 
   - set_id: dcase2017_gpu
     description: DCASE2017 baseline (GPU) using DCASE2017 task 1 development dataset

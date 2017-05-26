@@ -1178,7 +1178,8 @@ class AcousticSceneClassificationAppCore(AppCore):
                 train_meta = self.dataset.train(fold)
                 data = {}
                 annotations = {}
-                item_progress = tqdm(train_meta.file_list[::self.params.get_path('learner.file_hop', 1)],
+                #item_progress = tqdm(train_meta.file_list[::self.params.get_path('learner.file_hop', 1)],
+                item_progress = tqdm(train_meta[::self.params.get_path('learner.file_hop', 1)],
                                      desc="           {0: >15s}".format('Collect data '),
                                      file=sys.stdout,
                                      leave=False,

@@ -1099,6 +1099,306 @@ class SceneClassifierGMMdeprecated(SceneClassifier):
         return logls
 
 
+class SceneClassifierCNN(SceneClassifier, KerasMixin):
+    """Scene classifier with CNN"""
+    def __init__(self, *args, **kwargs):
+        self.default_parameters = DottedDict({
+
+        })
+        self.default_parameters.merge(override=kwargs.get('params',{}))
+        kwargs['params'] = self.default_parameters
+
+        super(SceneClassifierCNN, self).__init__(*args, **kwargs)
+        self.method = 'cnn'
+
+    def learn(self, data, annotations):
+
+        training_files = sorted(list(annotations.keys()))  # Collect training files
+        if self.learner_params.get_path('validation.enable', False):
+            validation_files = self._generate_validation(
+                annotations=annotations,
+                validation_type=self.learner_params.get_path('validation.setup_source'),
+                valid_percentage=self.learner_params.get_path('validation.validation_amount', 0.20),
+                seed=self.learner_params.get_path('validation.seed')
+            )
+            training_files = sorted(list(set(training_files) - set(validation_files)))
+        else:
+            validation_files = []
+
+        # Double check that training and validation files are not overlapping.
+        if set(training_files).intersection(validation_files):
+            message = '{name}: Training and validation file lists are overlapping!'.format(
+                name=self.__class__.__name__
+            )
+
+            self.logger.exception(message)
+            raise ValueError(message)
+
+        # Convert annotations into activity dict
+        activity_matrix_dict = self._get_target_matrix_dict(data=data, annotations=annotations)
+
+        # Process data
+        #X_training.shape: (imagenum, featurelen, featurelen, 1)
+        X_training = self.process_data(data=data, files=training_files)
+        #Y_training.shape:(1540575, 200)
+        Y_training = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=training_files)
+
+        if self.show_extra_debug:
+            self.logger.debug('  Training items \t[{examples:d}]'.format(examples=len(X_training)))
+
+        # Process validation data
+        if validation_files:
+            X_validation = self.process_data(data=data, files=validation_files)
+            Y_validation = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=validation_files)
+
+            validation = (X_validation, Y_validation)
+            if self.show_extra_debug:
+                self.logger.debug('  Validation items \t[{validation:d}]'.format(validation=len(X_validation)))
+        else:
+            validation = None
+
+        # Set seed
+        self.set_seed()
+
+        # Setup Keras
+        self._setup_keras()
+
+        with SuppressStdoutAndStderr():
+            # Import keras and suppress backend announcement printed to stderr
+            import keras
+
+        # Create model
+        self.create_model(input_shape=self._get_input_size(data=data))
+
+        if self.show_extra_debug:
+            self.log_model_summary()
+        class FancyProgbarLogger(keras.callbacks.Callback):
+            """Callback that prints metrics to stdout.
+            """
+
+            def __init__(self, callbacks=None, queue_length=10, metric=None, disable_progress_bar=False, log_progress=False):
+                self.metric = metric
+                self.disable_progress_bar = disable_progress_bar
+                self.log_progress = log_progress
+                self.timer = Timer()
+
+            def on_train_begin(self, logs=None):
+                self.logger = logging.getLogger(__name__)
+                self.verbose = self.params['verbose']
+                self.epochs = self.params['epochs']
+                if self.log_progress:
+                    self.logger.info('Starting training process')
+                self.pbar = tqdm(total=self.epochs,
+                                 file=sys.stdout,
+                                 desc='           {0:>15s}'.format('Learn (epoch)'),
+                                 leave=False,
+                                 miniters=1,
+                                 disable=self.disable_progress_bar
+                                 )
+
+            def on_train_end(self, logs=None):
+                self.pbar.close()
+
+            def on_epoch_begin(self, epoch, logs=None):
+                if self.log_progress:
+                    self.logger.info('  Epoch %d/%d' % (epoch + 1, self.epochs))
+                self.seen = 0
+                self.timer.start()
+
+            def on_batch_begin(self, batch, logs=None):
+                if self.seen < self.params['samples']:
+                    self.log_values = []
+
+            def on_batch_end(self, batch, logs=None):
+                logs = logs or {}
+                batch_size = logs.get('size', 0)
+                self.seen += batch_size
+
+                for k in self.params['metrics']:
+                    if k in logs:
+                        self.log_values.append((k, logs[k]))
+
+            def on_epoch_end(self, epoch, logs=None):
+                logs = logs or {}
+                postfix = {
+                    'train': None,
+                    'validation': None,
+                }
+                for k in self.params['metrics']:
+                    if k in logs:
+                        self.log_values.append((k, logs[k]))
+                        if self.metric and k.endswith(self.metric):
+                            if k.startswith('val_'):
+                                postfix['validation'] = '{:4.2f}'.format(logs[k] * 100.0)
+                            else:
+                                postfix['train'] = '{:4.2f}'.format(logs[k] * 100.0)
+                self.timer.stop()
+                if self.log_progress:
+                    self.logger.info('                train={train}, validation={validation}, time={time}'.format(
+                        train=postfix['train'],
+                        validation=postfix['validation'],
+                        time=self.timer.get_string())
+                    )
+
+                self.pbar.set_postfix(postfix)
+                self.pbar.update(1)
+
+        # Add model callbacks
+        fancy_logger = FancyProgbarLogger(metric=self.learner_params.get_path('model.metrics')[0],
+                                          disable_progress_bar=self.disable_progress_bar,
+                                          log_progress=self.log_progress)
+
+        # Callback list, always have FancyProgbarLogger
+        callbacks = [fancy_logger]
+
+        callback_params = self.learner_params.get_path('training.callbacks', [])
+        if callback_params:
+            for cp in callback_params:
+                if cp['type'] == 'ModelCheckpoint' and not cp['parameters'].get('filepath'):
+                    cp['parameters']['filepath'] = os.path.splitext(self.filename)[0] + '.weights.{epoch:02d}-{val_loss:.2f}.hdf5'
+
+                if cp['type'] == 'EarlyStopping' and cp.get('parameters').get('monitor').startswith('val_') and not self.learner_params.get_path('validation.enable', False):
+                    message = '{name}: Cannot use callback type [{type}] with monitor parameter [{monitor}] as there is no validation set.'.format(
+                        name=self.__class__.__name__,
+                        type=cp['type'],
+                        monitor=cp.get('parameters').get('monitor')
+                    )
+
+                    self.logger.exception(message)
+                    raise AttributeError(message)
+
+                try:
+                    # Get Callback class
+                    CallbackClass = getattr(importlib.import_module("keras.callbacks"), cp['type'])
+
+                    # Add callback to list
+                    callbacks.append(CallbackClass(**cp.get('parameters', {})))
+
+                except AttributeError:
+                    message = '{name}: Invalid Keras callback type [{type}]'.format(
+                        name=self.__class__.__name__,
+                        type=cp['type']
+                    )
+
+                    self.logger.exception(message)
+                    raise AttributeError(message)
+
+        if self.show_extra_debug:
+            self.logger.debug('  Feature vector \t[{vector:d}]'.format(
+                vector=self._get_input_size(data=data))
+            )
+            self.logger.debug('  Batch size \t[{batch:d}]'.format(
+                batch=self.learner_params.get_path('training.batch_size', 1))
+            )
+
+            self.logger.debug('  Epochs \t\t[{epoch:d}]'.format(
+                epoch=self.learner_params.get_path('training.epochs', 1))
+            )
+
+        # Set seed
+        self.set_seed()
+
+        hist = self.model.fit(x=X_training,
+                              y=Y_training,
+                              batch_size=self.learner_params.get_path('training.batch_size', 1),
+                              epochs=self.learner_params.get_path('training.epochs', 1),
+                              validation_data=validation,
+                              verbose=0,
+                              shuffle=self.learner_params.get_path('training.shuffle', True),
+                              callbacks=callbacks
+                              )
+        self['learning_history'] = hist.history
+
+
+
+    #overide process_data in KerasMixIn
+    #data{dict}['file_name']{FeatureContainer}.feat{list}[0]{ndarray}.shape = (frameNum,FeatureVecLen)
+    #return ndarray of dim (SpectrogramSubImageNum,FeatureVecLen, FramesPerImage,1)
+    def process_data(self, data, files):
+        """get datamatrix to be processed by cnn
+
+        parameters:
+            files: list of file names
+            data: dict of featurecontainers
+
+        """
+        images = []
+        vector_len = 0
+        for file_name in files:
+            frame_len = data[file_name].feat[0].shape[0]
+            vector_len = data[file_name].vector_length
+
+            #(NumImagePerSample,Height,Width)
+            sample_images = numpy.reshape(data[file_name].feat[0][0: vector_len * (frame_len / vector_len),:], (-1, vector_len, vector_len))
+            images.append(sample_images)
+        return numpy.reshape(numpy.vstack(tuple(images)),(-1, vector_len, vector_len, 1))
+
+    def predict(self, feature_data, recognizer_params=None):
+        """
+        :param feature_data:
+            feature_data.feat[0].shape=(501,200)
+        :param recognizer_params:
+        :return:
+            one hot class labels
+        """
+        if recognizer_params is None:
+            recognizer_params = {}
+
+        if not isinstance(recognizer_params, DottedDict):
+            # Convert parameters to DottedDict
+            recognizer_params = DottedDict(recognizer_params)
+
+        if isinstance(feature_data, FeatureContainer):
+            # If we have featureContainer as input, get feature_data
+            feature_data = feature_data.feat[0]
+
+        # Get frame wise probabilities
+        image_probabilities = self._image_probabilities(feature_data)
+
+        # Accumulate probabilities
+        if recognizer_params.get_path('frame_accumulation.enable', True):
+            probabilities = self._accumulate_probabilities(probabilities=image_probabilities,
+                                                           accumulation_type=recognizer_params.get_path('frame_accumulation.type'))
+        else:
+            # Pass probabilities
+            probabilities = image_probabilities
+
+        # Decision making
+        if recognizer_params.get_path('decision_making.enable', True):
+            if recognizer_params.get_path('decision_making.type') == 'maximum':
+                classification_result_id = numpy.argmax(probabilities)
+
+            else:
+                message = '{name}: Unknown decision_making type [{type}].'.format(
+                    name=self.__class__.__name__,
+                    type=recognizer_params.get_path('decision_making.type')
+                )
+
+                self.logger.exception(message)
+                raise AssertionError(message)
+
+        return self.class_labels[classification_result_id]
+
+    def _get_target_matrix_dict(self, data, annotations):
+        activity_matrix_dict = {}
+        for audio_filename in sorted(list(annotations.keys())):
+            frame_count = data[audio_filename].feat[0].shape[0]
+            image_count = frame_count / data[audio_filename].feat[0].shape[1]
+            pos = self.class_labels.index(annotations[audio_filename]['scene_label'])
+            roll = numpy.zeros((image_count, len(self.class_labels)))
+            roll[:, pos] = 1
+            activity_matrix_dict[audio_filename] = roll
+        return activity_matrix_dict
+
+    def _image_probabilities(self, feature_data):
+        return self.model.predict(x=self._clip2images(feature_data)).T
+
+    def _clip2images(self, feature_data):
+
+        frame_len, feature_len = feature_data.shape
+        return numpy.reshape(feature_data[0: feature_len * (frame_len / feature_len),:],(-1,feature_len, feature_len,1))
+
+
 class SceneClassifierMLP(SceneClassifier, KerasMixin):
     """Scene classifier with MLP"""
     def __init__(self, *args, **kwargs):
@@ -1208,7 +1508,9 @@ class SceneClassifierMLP(SceneClassifier, KerasMixin):
         activity_matrix_dict = self._get_target_matrix_dict(data=data, annotations=annotations)
 
         # Process data
+        #X_training.shape: (1540575, 200), (frames, frame_feature)
         X_training = self.process_data(data=data, files=training_files)
+        #Y_training.shape:(1540575, 200)
         Y_training = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=training_files)
 
         if self.show_extra_debug:
