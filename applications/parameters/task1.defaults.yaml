@@ -18,10 +18,10 @@ sets:
       win_length_seconds: 0.1
       hop_length_seconds: 0.02
     learner:
-      method: cnn
+      method: mlp
       show_model_information: false
     learner_method_parameters:
-      cnn:
+      mlp:
         seed: 1
         keras:
           backend: tensorflow
@@ -41,7 +41,7 @@ sets:
 
         training:
           epochs: 200
-          batch_size: 100
+          batch_size: 256
           shuffle: true
           callbacks:
             - type: EarlyStopping
@@ -53,64 +53,49 @@ sets:
                 mode: max
         model:
           config:
-            - class_name: Conv2D
+            - class_name: Dense
               config:
-                filters: 32
-                kernel_size: [5,5]
-                strides: [3,3]
-                padding: same
-                activation: relu
-                input_shape: [200,200,1]
-
-            - class_name: BatchNormalization
-
-            - class_name: MaxPooling2D
-              config:
-                pool_size: [5,5]
-
-            - class_name: Conv2D
-              config:
-                filters: 64
-                kernel_size: [5,5]
-                strides: [3,3]
-                padding: same
+                units: 50
+                kernel_initializer: uniform
                 activation: relu
 
-            - class_name: BatchNormalization
-
-            - class_name: MaxPooling2D
+            - class_name: Dropout
               config:
-                pool_size: [5,5]
+                rate: 0.2
 
-            - class_name: Flatten
+            - class_name: Dense
+              config:
+                units: 50
+                kernel_initializer: uniform
+                activation: relu
+
+            - class_name: Dropout
+              config:
+                rate: 0.2
 
             - class_name: Dense
               config:
                 units: CLASS_COUNT
+                kernel_initializer: uniform
                 activation: softmax
 
           loss: categorical_crossentropy
 
           optimizer:
-            type: SGD
-            parameters:
-              lr: 0.02
-              momentum: 0.9
-              decay: 0.000001
-
+            type: Adam
 
           metrics:
             - categorical_accuracy
 
     recognizer:
       frame_accumulation:
-        enable: true
-      frame_binarization:
         enable: false
+      frame_binarization:
+        enable: true
         type: frame_max             # [frame_max, global_threshold]
       decision_making:
         enable: true
-        type: maximum         # [maximum, majority_vote]
+        type: majority_vote         # [maximum, majority_vote]
 
   - set_id: dcase2017_gpu
     description: DCASE2017 baseline (GPU) using DCASE2017 task 1 development dataset
