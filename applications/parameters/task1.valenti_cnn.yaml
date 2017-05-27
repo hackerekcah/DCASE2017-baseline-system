@@ -10,18 +10,20 @@ sets:
         name: TUTAcousticScenes_2017_DevelopmentSet
         fold_list: [1, 2, 3, 4]
         evaluation_mode: folds
+
     feature_extractor_method_parameters:
       mel:                                    # Mel band energy
         mono: true                            # [true, false]
         window: hamming_asymmetric            # [hann_asymmetric, hamming_asymmetric]
         spectrogram_type: magnitude           # [magnitude, power]
-        n_mels: 149                           # Number of mel bands used
+        n_mels: 60                            # Number of mel bands used
         normalize_mel_bands: false            # [true, false]
         n_fft: 2048                           # FFT length
         fmin: 0                               # Minimum frequency when constructing mel bands
         fmax: 22050                           # Maximum frequency when constructing mel band
         htk: false                            # Switch for HTK-styled mel-frequency equation
         log: true                             # Logarithmic
+
     feature_stacker:
       stacking_recipe: mel
     feature_aggregator:
@@ -46,6 +48,10 @@ sets:
             threads: 1
             CNR: true
 
+        FeatureImageSize:
+          height: 60
+          width:  75
+
         validation:
           enable: true
           setup_source: generated_scene_balanced
@@ -67,160 +73,57 @@ sets:
           config:
             - class_name: Conv2D
               config:
-                filters: 32
+                filters: 256
                 kernel_size: [5,5]
-                strides: [2,2]
-                padding: same
-                activation: relu
-                input_shape: [149,149,1]
-            - class_name: BatchNormalization
-
-            - class_name: Conv2D
-              config:
-                filters: 32
-                kernel_size: [3,3]
                 strides: [1,1]
                 padding: same
                 activation: relu
+                input_shape: [60, 75, 1]
+
             - class_name: BatchNormalization
 
             - class_name: MaxPooling2D
               config:
-                pool_size: [2,2]
-
-            - class_name: Dropout
-              config:
-                rate: 0.3
-
-            - class_name: Conv2D
-              config:
-                filters: 64
-                kernel_size: [3,3]
-                strides: [1,1]
-                padding: same
-                activation: relu
-            - class_name: BatchNormalization
-
-            - class_name: Conv2D
-              config:
-                filters: 64
-                kernel_size: [3, 3]
-                strides: [1,1]
-                padding: same
-                activation: relu
-            - class_name: BatchNormalization
-
-            - class_name: MaxPooling2D
-              config:
-                pool_size: [2,2]
-
-            - class_name: Dropout
-              config:
-                rate: 0.3
-
-            - class_name: Conv2D
-              config:
-                filters: 128
-                kernel_size: [3, 3]
-                strides: [1,1]
-                padding: same
-                activation: relu
-            - class_name: BatchNormalization
-            - class_name: Conv2D
-              config:
-                filters: 128
-                kernel_size: [3, 3]
-                strides: [1,1]
-                padding: same
-                activation: relu
-            - class_name: BatchNormalization
-            - class_name: Conv2D
-              config:
-                filters: 128
-                kernel_size: [3, 3]
-                strides: [1,1]
-                padding: same
-                activation: relu
-            - class_name: BatchNormalization
-            - class_name: Conv2D
-              config:
-                filters: 128
-                kernel_size: [3, 3]
-                strides: [1,1]
-                padding: same
-                activation: relu
-            - class_name: BatchNormalization
-
-            - class_name: MaxPooling2D
-              config:
-                pool_size: [2,2]
-
-            - class_name: Dropout
-              config:
-                rate: 0.3
+                pool_size: [5,5]
 
             - class_name: Conv2D
               config:
                 filters: 512
-                kernel_size: [3, 3]
+                kernel_size: [5,5]
                 strides: [1,1]
-                padding: valid
+                padding: same
                 activation: relu
+
             - class_name: BatchNormalization
-            - class_name: Dropout
-              config:
-                rate: 0.5
 
-            - class_name: Conv2D
+            - class_name: MaxPooling2D
               config:
-                filters: 512
-                kernel_size: [1,1]
-                strides: [1,1]
-                padding: valid
-                activation: relu
-            - class_name: BatchNormalization
-            - class_name: Dropout
-              config:
-                rate: 0.5
+                pool_size: [5,5]
 
-            - class_name: Conv2D
-              config:
-                filters: 15
-                kernel_size: [1,1]
-                strides: [1,1]
-                padding: valid
-                activation: relu
-
-            - class_name: GlobalAveragePooling2D
+            - class_name: Flatten
 
             - class_name: Dense
               config:
                 units: CLASS_COUNT
-                kernel_initializer: uniform
                 activation: softmax
 
           loss: categorical_crossentropy
 
           optimizer:
-            type: SGD
-            parameters:
-              lr: 0.02
-              momentum: 0.9
-              decay: 0.000001
-
+            type: adam
 
           metrics:
             - categorical_accuracy
 
     recognizer:
       frame_accumulation:
-        enable: false
-      frame_binarization:
         enable: true
+      frame_binarization:
+        enable: false
         type: frame_max             # [frame_max, global_threshold]
       decision_making:
         enable: true
-        type: majority_vote         # [maximum, majority_vote]
+        type: maximum         # [maximum, majority_vote]
 
   - set_id: dcase2017_gpu
     description: DCASE2017 baseline (GPU) using DCASE2017 task 1 development dataset
