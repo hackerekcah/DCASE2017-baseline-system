@@ -1389,7 +1389,7 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
         return self.class_labels[classification_result_id]
 
     def _get_target_matrix_dict(self, data, annotations, image_size_dict):
-        image_size_dict = self.FeatureImageSize
+    
         activity_matrix_dict = {}
         for audio_filename in sorted(list(annotations.keys())):
             frame_count = data[audio_filename].feat[0].shape[0]
