@@ -50,7 +50,7 @@ sets:
 
         FeatureImageSize:
           height: 60
-          width:  75
+          width:  150
 
         validation:
           enable: true
@@ -78,7 +78,7 @@ sets:
                 strides: [1,1]
                 padding: same
                 activation: relu
-                input_shape: [60, 75, 1]
+                input_shape: [60, 150, 1]
 
             - class_name: BatchNormalization
 
@@ -118,7 +118,7 @@ sets:
     recognizer:
       FeatureImageSize:
         height: 60
-        width: 75
+        width: 150
       frame_accumulation:
         enable: true
       frame_binarization:
