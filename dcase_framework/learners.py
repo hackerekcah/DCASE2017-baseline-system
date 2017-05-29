@@ -1146,7 +1146,7 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
 
         # Process data
         #X_training.shape: (imagenum, featurelen, featurelen, 1)
-        X_training = self.process_data(data=data, files=training_files)
+        X_training = self.process_data(data=data, files=training_files, image_size_dict=FeatureImageSize)
         #Y_training.shape:(1540575, 200)
         Y_training = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=training_files)
 
@@ -1155,7 +1155,7 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
 
         # Process validation data
         if validation_files:
-            X_validation = self.process_data(data=data, files=validation_files)
+            X_validation = self.process_data(data=data, files=validation_files, image_size_dict=FeatureImageSize)
             Y_validation = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=validation_files)
 
             validation = (X_validation, Y_validation)
@@ -1519,7 +1519,7 @@ class SceneClassifierMLP(SceneClassifier, KerasMixin):
 
         # Process data
         #X_training.shape: (1540575, 200), (frames, frame_feature)
-        X_training = self.process_data(data=data, files=training_files, image_size_dict=FeatureImageSize)
+        X_training = self.process_data(data=data, files=training_files)
         #Y_training.shape:(1540575, 200)
         Y_training = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=training_files)
 
@@ -1528,7 +1528,7 @@ class SceneClassifierMLP(SceneClassifier, KerasMixin):
 
         # Process validation data
         if validation_files:
-            X_validation = self.process_data(data=data, files=validation_files, image_size_dict=FeatureImageSize)
+            X_validation = self.process_data(data=data, files=validation_files)
             Y_validation = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=validation_files)
 
             validation = (X_validation, Y_validation)
