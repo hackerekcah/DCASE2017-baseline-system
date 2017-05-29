@@ -1134,15 +1134,15 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
             self.logger.exception(message)
             raise ValueError(message)
 
-        self.FeatureImageSize = self.learner_params.get_path('FeatureImageSize')
+        FeatureImageSize = self.learner_params.get_path('FeatureImageSize')
 
         #if FeatureImageSize is not specified, use the input_shape of first conv layer.
-        if self.FeatureImageSize is None:
-            self.FeatureImageSize = {}
-            self.FeatureImageSize['height'] = self.learner_params.get_path('model.config')[0]['config']['input_shape'][0]
-            self.FeatureImageSize['width'] = self.learner_params.get_path('model.config')[0]['config']['input_shape'][1]
+        if FeatureImageSize is None:
+            FeatureImageSize = {}
+            FeatureImageSize['height'] = self.learner_params.get_path('model.config')[0]['config']['input_shape'][0]
+            FeatureImageSize['width'] = self.learner_params.get_path('model.config')[0]['config']['input_shape'][1]
         # Convert annotations into activity dict
-        activity_matrix_dict = self._get_target_matrix_dict(data=data, annotations=annotations)
+        activity_matrix_dict = self._get_target_matrix_dict(data=data, annotations=annotations, image_size_dict=FeatureImageSize)
 
         # Process data
         #X_training.shape: (imagenum, featurelen, featurelen, 1)
@@ -1321,7 +1321,7 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
     #overide process_data in KerasMixIn
     #data{dict}['file_name']{FeatureContainer}.feat{list}[0]{ndarray}.shape = (frameNum,FeatureVecLen)
     #return ndarray of dim (SpectrogramSubImageNum,FeatureVecLen, FramesPerImage,1)
-    def process_data(self, data, files):
+    def process_data(self, data, files, image_size_dict):
         """get datamatrix to be processed by cnn
 
         parameters:
@@ -1329,7 +1329,6 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
             data: dict of featurecontainers
 
         """
-        image_size_dict = self.FeatureImageSize
         images = []
         vector_len = 0
         for file_name in files:
@@ -1359,9 +1358,11 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
         if isinstance(feature_data, FeatureContainer):
             # If we have featureContainer as input, get feature_data
             feature_data = feature_data.feat[0]
-
+            
+        FeatureImageSize = recognizer_params.get_path('FeatureImageSize')
+            
         # Get frame wise probabilities
-        image_probabilities = self._image_probabilities(feature_data)
+        image_probabilities = self._image_probabilities(feature_data, image_size_dict=FeatureImageSize)
 
         # Accumulate probabilities
         if recognizer_params.get_path('frame_accumulation.enable', True):
@@ -1387,7 +1388,7 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
 
         return self.class_labels[classification_result_id]
 
-    def _get_target_matrix_dict(self, data, annotations):
+    def _get_target_matrix_dict(self, data, annotations, image_size_dict):
         image_size_dict = self.FeatureImageSize
         activity_matrix_dict = {}
         for audio_filename in sorted(list(annotations.keys())):
@@ -1399,11 +1400,10 @@ class SceneClassifierCNN(SceneClassifier, KerasMixin):
             activity_matrix_dict[audio_filename] = roll
         return activity_matrix_dict
 
-    def _image_probabilities(self, feature_data):
-        return self.model.predict(x=self._clip2images(feature_data)).T
+    def _image_probabilities(self, feature_data, image_size_dict):
+        return self.model.predict(x=self._clip2images(feature_data, image_size_dict)).T
 
-    def _clip2images(self, feature_data):
-        image_size_dict = self.FeatureImageSize
+    def _clip2images(self, feature_data, image_size_dict):
         frame_len = feature_data.shape[0]
         feature_len = image_size_dict['height']
         return numpy.reshape(feature_data[0: image_size_dict['width'] * (frame_len / image_size_dict['width']),:],(-1, feature_len, image_size_dict['width'], 1))
@@ -1519,7 +1519,7 @@ class SceneClassifierMLP(SceneClassifier, KerasMixin):
 
         # Process data
         #X_training.shape: (1540575, 200), (frames, frame_feature)
-        X_training = self.process_data(data=data, files=training_files)
+        X_training = self.process_data(data=data, files=training_files, image_size_dict=FeatureImageSize)
         #Y_training.shape:(1540575, 200)
         Y_training = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=training_files)
 
@@ -1528,7 +1528,7 @@ class SceneClassifierMLP(SceneClassifier, KerasMixin):
 
         # Process validation data
         if validation_files:
-            X_validation = self.process_data(data=data, files=validation_files)
+            X_validation = self.process_data(data=data, files=validation_files, image_size_dict=FeatureImageSize)
             Y_validation = self.process_activity(activity_matrix_dict=activity_matrix_dict, files=validation_files)
 
             validation = (X_validation, Y_validation)
