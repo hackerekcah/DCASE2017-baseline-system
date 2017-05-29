@@ -214,8 +214,8 @@ sets:
 
     recognizer:
       FeatureImageSize:
-        height:149
-        width:149
+        height: 149
+        width: 149
       frame_accumulation:
         enable: true
       frame_binarization:
