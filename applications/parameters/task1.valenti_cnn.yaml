@@ -116,6 +116,9 @@ sets:
             - categorical_accuracy
 
     recognizer:
+      FeatureImageSize:
+        height: 60
+        width: 75
       frame_accumulation:
         enable: true
       frame_binarization:
