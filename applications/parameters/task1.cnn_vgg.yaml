@@ -217,13 +217,13 @@ sets:
         height:149
         width:149
       frame_accumulation:
-        enable: false
-      frame_binarization:
         enable: true
+      frame_binarization:
+        enable: false
         type: frame_max             # [frame_max, global_threshold]
       decision_making:
         enable: true
-        type: majority_vote         # [maximum, majority_vote]
+        type: maximum         # [maximum, majority_vote]
 
   - set_id: dcase2017_gpu
     description: DCASE2017 baseline (GPU) using DCASE2017 task 1 development dataset
